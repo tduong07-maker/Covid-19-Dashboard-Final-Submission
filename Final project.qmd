@@ -1,0 +1,326 @@
+---
+title: "Final Project"
+author: "Tim, Ruhi, Hannah"
+format: 
+  dashboard:
+    self-contained-math: true
+    theme: simplex
+    embed-resources: true
+---
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(DT)
+library(lubridate)
+
+cases_df <- read.csv("~/Final prject/MD_COVID-19_-_Cases_by_Gender_Distribution.csv")
+deaths_df <- read.csv("~/Final prject/MD_COVID-19_-_Confirmed_Deaths_by_Gender_Distribution.csv")
+
+cases_df <- cases_df |>
+  mutate(DATE = as.Date(DATE, format = "%m/%d/%Y"))
+  
+deaths_df <- deaths_df |>
+  mutate(DATE = as.Date(DATE, format = "%m/%d/%Y"))
+
+full_cases <- cases_df |> 
+  full_join(deaths_df, join_by(DATE)) |> 
+  rename(
+    Male_Cases    = Male.x,
+    Female_Cases  = Female.x,
+    Unknown_Cases = Unknown.x,
+    Male_Death    = Male.y,
+    Female_Death  = Female.y,
+    Unknown_Death = Unknown.y
+  )
+```
+
+```{r}
+gender_summary_df <- full_cases |>
+  slice_tail(n = 1) |>
+  transmute(
+    total_male_cases    = Male_Cases,
+    total_female_cases  = Female_Cases,
+    total_unknown_cases = Unknown_Cases,
+    total_male_deaths   = Male_Death,
+    total_female_deaths = Female_Death,
+    total_unknown_deaths= Unknown_Death
+  )
+```
+
+```{r}
+daily_deaths_base <- full_cases |>
+  mutate(
+    Male_Death    = replace_na(Male_Death, 0),
+    Female_Death  = replace_na(Female_Death, 0),
+    Unknown_Death = replace_na(Unknown_Death, 0)
+  ) |>
+  arrange(DATE) |>
+  mutate(
+    male_new_deaths    = pmax(Male_Death    - lag(Male_Death),    0),
+    female_new_deaths  = pmax(Female_Death  - lag(Female_Death),  0),
+    unknown_new_deaths = pmax(Unknown_Death - lag(Unknown_Death), 0)
+  )
+
+daily_deaths_df <- bind_rows(
+  daily_deaths_base |> transmute(DATE, Gender = "Male",    NewDeaths = male_new_deaths),
+  daily_deaths_base |> transmute(DATE, Gender = "Female",  NewDeaths = female_new_deaths),
+  daily_deaths_base |> transmute(DATE, Gender = "Unknown", NewDeaths = unknown_new_deaths)
+)
+
+
+```
+
+# Introduction {height="100%"}
+
+## Overview
+
+The COVID‑19 pandemic reshaped societies, economies, and daily life in unprecedented ways. One important dimension of its impact involves how different demographic groups experienced the virus. This project focuses on **gender‑based differences in COVID‑19 cases and deaths in Maryland from 2020 to 2025**, using publicly available state‑level data to explore how infection and mortality patterns varied over time.
+
+Our analysis is guided by three central questions:
+
+-   **Big Picture Question 1:** How did reported COVID‑19 cases and deaths differ between men and women across time?
+-   **Big Picture Question 2:** What biological, social, or behavioral factors might explain disparities in COVID‑19 outcomes between genders?
+-   **Big Picture Question 3:** How can understanding gender‑based differences during the pandemic inform more equitable public health interventions in the future?
+
+Research during the pandemic consistently found that although infection rates were often similar across genders, **men experienced higher rates of severe illness and mortality**. Emerging evidence suggests that hyperinflammatory responses, immune system differences, and comorbidity patterns may contribute to these disparities. Social factors—such as occupational exposure, health‑seeking behavior, and unequal access to care also played a role.\
+Source: *Hyperinflammatory conditions drive gender differences in COVID‑19 severity and mortality*\
+https://www.news-medical.net/news/20210125/Hyperinflammatory-conditions-drive-gender-differences-in-COVID-19-severity-and-mortality.aspx
+
+To investigate these patterns, we use two publicly available datasets:
+
+-   **Maryland COVID‑19 Cases by Gender Distribution**\
+    https://catalog.data.gov/dataset/md-covid-19-cases-by-gender-distribution\
+-   **Maryland COVID‑19 Confirmed Deaths by Gender Distribution**\
+    https://data.imap.maryland.gov/datasets/maryland::mdcovid19-confirmeddeathsbygenderdistribution/about
+
+Understanding gendered health disparities is important because these differences influence public health planning, resource allocation, and equitable policy design. Ethical considerations include reporting delays, undercounts, and gender misclassification. These datasets are aggregated and anonymized, but limitations must still be acknowledged.
+
+------------------------------------------------------------------------
+
+## Row 2 {height="80%"}
+
+### Column 1
+
+::: {.card title="Data Context: Dataset 1 — COVID‑19 Cases"}
+**Public link:**\
+https://catalog.data.gov/dataset/md-covid-19-cases-by-gender-distribution
+
+**Creator:**\
+Maryland Department of Health, hosted on the Maryland Open Data Portal.
+
+**Sample description:**\
+This dataset reports cumulative COVID‑19 case counts in Maryland, disaggregated by gender (Male, Female, Unknown). Data are collected from confirmed laboratory test results submitted by healthcare providers, testing centers, and state reporting systems. Each entry represents the total number of confirmed cases reported on a specific date, along with gender‑based percentages. The dataset spans from 2020 through 2025 and includes thousands of observations.
+
+**What was measured:**\
+Confirmed COVID‑19 cases based on laboratory testing. Each row corresponds to a reporting date and includes gender‑specific case totals.
+
+**Years covered:** 2020–2025\
+**Geographic scope:** Maryland, USA\
+**Representativeness:**\
+Strong statewide coverage, though testing access and reporting delays may affect representation.
+:::
+
+### Column 2
+
+::: {.card title="Data Context: Dataset 2 — COVID‑19 Deaths"}
+**Public link:**\
+https://data.imap.maryland.gov/datasets/maryland::mdcovid19-confirmeddeathsbygenderdistribution/about
+
+**Creator:**\
+Maryland Department of Health and the Vital Statistics Administration.
+
+**Sample description:**\
+This dataset provides cumulative counts of confirmed COVID‑19 deaths in Maryland, separated by gender. Deaths are verified through the state’s vital records system, which includes physician reporting and confirmed COVID‑19 testing. Each entry represents the cumulative number of deaths recorded on a given date. The dataset spans the full duration of the pandemic (2020–2025).
+
+**What was measured:**\
+Confirmed COVID‑19 deaths based on official death certificates and medical reporting.
+
+**Years covered:** 2020–2025 **Geographic scope:** Maryland, USA\
+**Representativeness:**\
+Reliable due to official verification, though early‑pandemic underreporting and gender misclassification may affect accuracy.
+:::
+
+# Question 1: How did reported COVID‑19 cases and deaths differ between men and women across time? {height="100%"}
+
+## Row 1
+
+### Column 1
+
+::: {.card title="How did reported COVID‑19 cases and deaths differ between men and women across time?"}
+This graph shows the daily increases in COVID‑19 cases, and it reveals that females consistently experienced higher numbers of new cases compared to males. During the peak of the pandemic, female case counts spiked to nearly twice the level observed among males.
+:::
+
+```{r}
+daily_base <- full_cases |>
+  mutate(
+    Male_Cases    = replace_na(Male_Cases, 0),
+    Female_Cases  = replace_na(Female_Cases, 0),
+    Unknown_Cases = replace_na(Unknown_Cases, 0)
+  ) |>
+  arrange(DATE) |>
+  mutate(
+    male_new    = pmax(Male_Cases    - lag(Male_Cases),    0),
+    female_new  = pmax(Female_Cases  - lag(Female_Cases),  0),
+    unknown_new = pmax(Unknown_Cases - lag(Unknown_Cases), 0)
+  )
+
+daily_cases_df <- bind_rows(
+  daily_base |> transmute(DATE, Gender = "Male",    NewCases = replace_na(male_new, 0)),
+  daily_base |> transmute(DATE, Gender = "Female",  NewCases = replace_na(female_new, 0)),
+  daily_base |> transmute(DATE, Gender = "Unknown", NewCases = replace_na(unknown_new, 0))
+)
+p1 <- daily_cases_df |>
+  ggplot(aes(x = DATE, y = NewCases, fill = Gender)) +
+  geom_col() +
+  labs(
+    title = "Daily New COVID‑19 Cases by Gender",
+    x = "Date",
+    y = "New Cases",
+    fill = "Gender"
+  ) +
+  theme_minimal()
+ggplotly(p1)
+
+```
+
+# Question 2: How can understanding gender‑based differences during the pandemic inform more equitable public health interventions in the future? {height="100%"}
+
+## Row 1
+
+### Column 1
+
+::: {.card title="Question 2: How can understanding gender‑based differences during the pandemic inform more equitable public health interventions in the future?"}
+This line graph directly visualizes temporal patterns in daily COVID-19 deaths by gender, revealing how mortality evolved and where men and women diverged over the pandemic timeline. Men consistently outpaced women. The male line (blue) sits above the female line (red) across most periods, showing higher daily death counts for men at peak waves. This matches global studies where men faced higher COVID mortality risk. Waves amplify disparities. Both lines spike together during surges (Such as Delta and Omicron), but men's peaks are taller and more prolonged, suggesting greater vulnerability during high-transmission phases.
+:::
+
+```{r}
+deaths_capped <- daily_deaths_df |>
+  mutate(NewDeaths_capped = pmin(NewDeaths, 200))
+
+monthly_deaths <- deaths_capped |>
+  mutate(month = floor_date(DATE, "month")) |>
+  group_by(month, Gender) |>
+  summarize(monthly_deaths = sum(NewDeaths_capped, na.rm = TRUE), .groups = "drop")
+
+p_month <- ggplot(monthly_deaths, aes(x = month, y = monthly_deaths, color = Gender)) +
+  geom_line(linewidth = 1) +
+  scale_color_manual(values = c("Male" = "blue", "Female" = "red", "Unknown" = "gray")) +
+  labs(
+    title = "Monthly COVID-19 Deaths by Gender",
+    x = "Month",
+    y = "Deaths",
+    color = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+ggplotly(p_month)
+```
+
+
+# Question 3: What biological, social, or behavioral factors might explain disparities in COVID‑19 outcomes between genders {height="100%"}
+
+## Row 1
+
+### Column 1
+
+::: {.card title="Question 3: What biological, social, or behavioral factors might explain disparities in COVID‑19 outcomes between genders"}
+This graph displaying the cases and deaths for Male and Females showcases the difference between the numbers of each gender affected. By analyzing the gender-differences, we can make future inferences about which genders are more prone to certain risks to help create future health interventions.
+:::
+
+```{r}
+gender_summary_graph <- gender_summary_df |>
+  pivot_longer(
+    cols = c(
+      total_male_cases, total_female_cases, total_unknown_cases,
+      total_male_deaths, total_female_deaths, total_unknown_deaths
+    ),
+    names_to = "metric",
+    values_to = "value"
+  ) |>
+  mutate(
+    measure = if_else(str_detect(metric, "cases"), "Cases", "Deaths"),
+    sex = case_when(
+      str_detect(metric, "_female_")  ~ "Female",
+      str_detect(metric, "_male_")    ~ "Male",
+      str_detect(metric, "_unknown_") ~ "Unknown",
+      TRUE ~ "Other"
+    ),
+    sex = factor(sex, levels = c("Male", "Female", "Unknown"))
+  )
+
+tada <- ggplot(gender_summary_graph, aes(x = sex, y = value, fill = measure)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Cases vs. Deaths by Gender",
+    x = NULL,
+    y = "Count",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 12)
+ggplotly(tada)
+```
+
+
+
+
+# Coding Notes {height="100%"}
+
+## Row 1 {height="50%"}
+
+::: {.card title="Intermediate & Novel Tools"}
+**Missing Data Handling — replace_na(), pmax()**  
+These tools solved the problem of inconsistent cumulative reporting in the Maryland datasets, where some days had missing values or even decreases due to data corrections. Basic tools from class could not prevent negative daily values or automatically substitute missing cumulative counts with meaningful defaults.
+We learned to use these functions by looking it up how to use them and the sources led me to reddit and stack overflow so and they had examples of using it so i just played with it until something worked.
+
+**floor_date()**  
+this  solved the problem of working with dates stored as character strings, which prevented us from ordering observations chronologically or them into meaningful time periods. Class tools alone could not convert character dates or roll them up into monthly intervals, so `floor_date()` helped.
+We learned to use this functions by looking at Documentation and it provided us examples and the usage of it.
+
+**Strings — str_detect(), case_when()**  
+These tools solved the problem of extracting gender and measure information from column names, which were stored as long text strings rather than clean categorical variables. Basic tools from class could not automatically classify variables like `"total_male_cases"` into categories such as “Male” or “Cases,” so string detection and conditional logic were required.  
+We learned to use these functions by reading tidyverse string‑processing tutorials and experimenting with pattern‑matching to ensure the correct categories were assigned.
+
+**lag()**  
+The `lag()` function solved the problem of calculating daily changes from cumulative totals, which is essential for understanding how cases and deaths evolved over time. Without `lag()`, we would have no clean way to reference “yesterday’s value” for each row. Because the Maryland datasets only provide cumulative counts, `lag()` is required to transform them into meaningful daily increases.
+We learned about the lag function from reddit and learnt how to use it from the tidyverse website and rdocumentation. 
+:::
+
+
+# Conclusion and Summary Takeaways {height="100%"}
+
+## Row 1 {height="60%"}
+
+### Column 1
+
+::: {.card title="Major Takeaways from the Analysis"}
+Our analysis of COVID‑19 case and death data in Maryland from 2020–2025 reveals several key insights into the gender‑based dynamics of the pandemic. First, men experienced higher mortality rates than women, even though women consistently had higher infection rates. This suggests that biological factors, such as differences in immune response, may have played a significant role. It could also indicate that men are more likely to engage in hands‑on work or to ignore early symptoms of COVID‑19, which may have contributed to worse outcomes. This finding answers our first big‑picture question by confirming that gender disparities were not just theoretical but clearly visible in Maryland’s public health data.
+
+Second, our findings suggest that sociocultural and behavioral factors may have also contributed to observed differences. For example, occupational exposure and health-seeking behavior may have influenced case rates, with more men working in in-person or high-contact roles during the pandemic. This provides partial answers to our second big picture question, showing that biological explanations alone cannot fully describe the variations in outcomes and reinforcing the need for a cross-disciplinary approach that includes social determinants of health.
+:::
+
+### Column 2
+
+::: {.card title="Bias, Limitations, and Data Gaps"}
+Data transparency and gender disaggregation are vital for equitable health responses. The availability of gender-based reporting in Maryland stands out as a model for other states. However, our datasets only included binary gender categories (male/female), leaving out nonbinary and gender-diverse populations. This means our estimates are likely biased and may underestimate the full range of gender impacts during the pandemic.
+
+Unequal testing access early on may also have caused underreporting in certain demographic groups, meaning the real gender differences could be narrower or broader than what our analysis captured. Additionally, these numbers reflect only reported cases and deaths, so people who were misdiagnosed or unable to access testing are not represented in this data. Overall, our exploration likely underestimates the true burden of COVID-19 across genders.
+:::
+
+## Row 2 {height="40%"}
+
+### Column 1
+
+::: {.card title="Future Directions"}
+Looking forward, we would pursue several future directions. First, integrating gender with race or socioeconomic status could uncover overlapping inequities that shaped pandemic experiences more accurately. Second, conducting studies using follow-up health outcomes could help evaluate how gendered effects persisted beyond 2022, when the pandemic began to plateau.
+
+Lastly, applying statistical modeling or machine learning approaches might refine predictions of health vulnerabilities for future outbreaks. Together, these steps would support a deeper, fairer understanding of how gender influences public health resilience and would extend our answers to the third big picture question about designing more equitable public health interventions.
+:::
+
+
